@@ -141,7 +141,7 @@
       "",
       ""
      ],
-     "text": "route /sonify/scan/trig /sonify/scan/bands /sonify/scan/lum /sonify/scan/centroid /sonify/scan/hue /sonify/scan/edge /sonify/scan/density /sonify/feed1/zs /sonify/feed2/zs /sonify/feed3/zs /sonify/feed1/act /sonify/iss/latn"
+     "text": "route /sonify/scan/trig /sonify/scan/bandsn /sonify/scan/lumn /sonify/scan/centroidn /sonify/scan/hue /sonify/scan/edgen /sonify/scan/note /sonify/feed1/zs /sonify/feed2/zs /sonify/feed3/zs /sonify/feed1/act /sonify/iss/latn"
     }
    },
    {
@@ -312,7 +312,7 @@
       300.0,
       20.0
      ],
-     "text": "/scan/bands (아래 -> 위 대역 밝기)"
+     "text": "/scan/bandsn (아래 -> 위 대역 밝기, 0..1)"
     }
    },
    {
@@ -372,7 +372,7 @@
       300.0,
       20.0
      ],
-     "text": "/sonify/scan/lum  밝기 (음량)"
+     "text": "/sonify/scan/lumn  밝기 0..1 (음량)"
     }
    },
    {
@@ -407,7 +407,7 @@
       300.0,
       20.0
      ],
-     "text": "/sonify/scan/centroid  밝기 무게중심 (음높이)"
+     "text": "/sonify/scan/centroidn  밝기 무게중심 0..1 (음높이)"
     }
    },
    {
@@ -442,7 +442,7 @@
       300.0,
       20.0
      ],
-     "text": "/sonify/scan/hue  색상 (음색)"
+     "text": "/sonify/scan/hue  색상 0..1 (음색)"
     }
    },
    {
@@ -477,7 +477,7 @@
       300.0,
       20.0
      ],
-     "text": "/sonify/scan/edge  경계/질감"
+     "text": "/sonify/scan/edgen  경계/질감 0..1"
     }
    },
    {
@@ -512,7 +512,7 @@
       300.0,
       20.0
      ],
-     "text": "/sonify/scan/density  별 밀도"
+     "text": "/sonify/scan/note  주 음 (MIDI)"
     }
    },
    {

@@ -99,6 +99,7 @@ def test_generic_osc_stream(udp_listener):
     for a, args in recv_all():
         got.setdefault(a, args)
     for addr in ['/sonify/scan/pos', '/sonify/scan/lum', '/sonify/scan/centroid', '/sonify/scan/note',
+                 '/sonify/scan/lumn', '/sonify/scan/centroidn', '/sonify/scan/bandsn',
                  '/sonify/scan/rgb', '/sonify/scan/bands', '/sonify/scan/mix', '/sonify/feed1/zs',
                  '/sonify/iss/latn', '/sonify/meta/bandnotes', '/sonify/image/palette', '/sonify/feed1/name',
                  '/sonify/feed1/price']:
@@ -185,7 +186,13 @@ def test_poller_lifecycle_with_sim():
     assert e.feeds[0].ticks >= 2 and e.feeds[1].ticks >= 2
     assert e.feeds[2].ticks == 0
     old = e.poller
-    e.configure(poll_interval=0.3)     # 설정 바뀌면 폴러 재시작
+    for k in range(30):                # 슬라이더 드래그: 매 프레임 설정 변경
+        e.configure(poll_interval=0.3 + k * 0.01)
+        e.tick(1 / 60.0)
+    assert e.poller is old             # 디바운스: 아직 재시작 안 함
+    time.sleep(0.45)
+    e.tick(1 / 60.0)
     assert e.poller is not old and old._stop.is_set()
+    assert e.poller.jobs[0].interval == pytest.approx(0.59)
     e.close()
     assert e.poller is None

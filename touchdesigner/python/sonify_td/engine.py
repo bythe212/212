@@ -85,6 +85,7 @@ class SonifyEngine:
         self.mapping = []
         self.mapping_errors = []
         self.poller = None
+        self._restart_due = None
         self.osc = OscSender(self.cfg['osc_host'], self.cfg['osc_port'])
         self.live = OscSender(self.cfg['osc_host'], self.cfg['ableton_port'])
         self._osc_acc = 0.0
@@ -112,7 +113,8 @@ class SonifyEngine:
             for i, f in enumerate(self.feeds, 1):
                 f.configure(self.cfg['feed%d_provider' % i], self.cfg['feed%d_symbol' % i], self.cfg['window'])
             if self.poller is not None:
-                self.start()
+                # 슬라이더를 끄는 동안 매 프레임 스레드를 새로 만들지 않도록 마지막 변경 0.4초 뒤에 재시작
+                self._restart_due = time.monotonic() + self.RESTART_DEBOUNCE
         if changed & {'osc_host', 'osc_port', 'ableton_port'}:
             self.osc.configure(self.cfg['osc_host'], self.cfg['osc_port'])
             self.live.configure(self.cfg['osc_host'], self.cfg['ableton_port'])
@@ -152,13 +154,22 @@ class SonifyEngine:
             out.append(Job('iss', ISS_URLS, parse_iss, c['space_interval']))
         return out
 
+    RESTART_DEBOUNCE = 0.4
+
     def start(self):
         """폴러를 (다시) 시작한다. 이전 스레드는 멈추라고만 알리고 기다리지 않는다."""
+        self._restart_due = None
         if self.poller is not None:
             self.poller.stop()
         self.poller = Poller(self.jobs(), ssl_mode=self.cfg['ssl_mode']).start()
 
+    def flush_restart(self):
+        """미뤄 둔 폴러 재시작이 있으면 지금 한다."""
+        if self._restart_due is not None and self.poller is not None:
+            self.start()
+
     def stop(self):
+        self._restart_due = None
         if self.poller is not None:
             self.poller.stop()
             self.poller = None
@@ -192,9 +203,9 @@ class SonifyEngine:
 
     # ------------------------------------------------------------ 스캔
 
-    def set_image(self, arr, palette=True):
+    def set_image(self, arr, palette=True, stats=True):
         first = not self.analyzer.ready
-        self.analyzer.set_image(arr, self.cfg['palette_size'], palette=palette)
+        self.analyzer.set_image(arr, self.cfg['palette_size'], palette=palette, stats=stats)
         if first or palette:
             self.armed[:] = True
             self._meta_acc = 1e9
@@ -260,7 +271,8 @@ class SonifyEngine:
 
     def main_note(self):
         c = self.cfg
-        return music.quantize(c['note_low'] + self.scan['centroid'] * (c['note_high'] - c['note_low']),
+        # 이미지별로 편 무게중심(centroidn)을 써서 음역 전체를 오가게 한다
+        return music.quantize(c['note_low'] + self.scan['centroidn'] * (c['note_high'] - c['note_low']),
                               c['scale'], c['root'])
 
     # ------------------------------------------------------------ 프레임
@@ -281,6 +293,8 @@ class SonifyEngine:
             self.peaks = self.analyzer.band_peaks(x0, self.pos, c['bands'], c['scan_width'])
             self._detect_triggers(now)
         updates = []
+        if self._restart_due is not None and time.monotonic() >= self._restart_due:
+            self.flush_restart()
         if self.poller is not None:
             for r in self.poller.drain():
                 if self.ingest(r, now):
@@ -301,6 +315,8 @@ class SonifyEngine:
             ('scan/b', s['b']), ('scan/hue', s['hue']), ('scan/sat', s['sat']),
             ('scan/centroid', s['centroid']), ('scan/spread', s['spread']), ('scan/peak', s['peak']),
             ('scan/contrast', s['contrast']), ('scan/edge', s['edge']), ('scan/density', s['density']),
+            ('scan/lumn', s['lumn']), ('scan/centroidn', s['centroidn']), ('scan/edgen', s['edgen']),
+            ('scan/satn', s['satn']), ('scan/contrastn', s['contrastn']),
             ('scan/note', float(self.main_note())), ('scan/palidx', float(s['palidx'])),
             ('scan/playing', 1.0 if self.playing else 0.0),
             ('scan/trig', float(len(self.frame_trigs))), ('scan/trigband', float(trig[0])),
@@ -329,6 +345,7 @@ class SonifyEngine:
             n = len(s['bands'])
             return {
                 'lum': [float(v) for v in s['bands']],
+                'lumn': [float(v) for v in s['bandsn']],
                 'r': [float(v) for v in s['band_rgb'][:, 0]],
                 'g': [float(v) for v in s['band_rgb'][:, 1]],
                 'b': [float(v) for v in s['band_rgb'][:, 2]],
@@ -385,6 +402,7 @@ class SonifyEngine:
                     msgs.append((P + '/' + k, [int(v) if k in INT_KEYS else v]))
                 msgs.append((P + '/scan/rgb', [s['r'], s['g'], s['b']]))
                 msgs.append((P + '/scan/bands', [float(v) for v in s['bands']]))
+                msgs.append((P + '/scan/bandsn', [float(v) for v in s['bandsn']]))
                 if len(s['mix']):
                     msgs.append((P + '/scan/mix', [float(v) for v in s['mix']]))
                 for i in range(1, NUM_FEEDS + 1):

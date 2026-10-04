@@ -224,9 +224,11 @@ class SonifyExt:
         if sig == self._img_sig:
             return
         self._img_sig = sig
-        # 영상 입력이면 팔레트(k-means)는 2초마다만 다시 계산
-        palette = (not live) or self._frame % 120 == 0 or not self.engine.analyzer.ready
-        self.engine.set_image(arr, palette=palette)
+        # 영상 입력이면 팔레트(k-means)는 2초마다, 정규화 범위는 0.5초마다만 다시 계산
+        ready = self.engine.analyzer.ready
+        palette = (not live) or self._frame % 120 == 0 or not ready
+        stats = (not live) or self._frame % 30 == 0 or not ready
+        self.engine.set_image(arr, palette=palette, stats=stats)
         src = self._op('source')
         if src is not None:
             self._img_res = (int(src.width), int(src.height))

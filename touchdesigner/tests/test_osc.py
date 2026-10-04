@@ -46,7 +46,24 @@ def test_sender_udp(udp_listener):
 
 
 def test_sender_bad_host_does_not_raise():
+    import time
+    t = time.perf_counter()
     s = OscSender('no-such-host.invalid', 9000)
     s.send('/x', 1)
-    assert not s.ok
-    assert s.last_error
+    assert time.perf_counter() - t < 0.1          # DNS 를 기다리지 않는다
+    assert not s.ok and s.last_error
+    for _ in range(100):
+        if not s.last_error.startswith('resolving'):
+            break
+        time.sleep(0.05)
+    assert not s.ok and 'no-such-host' in s.last_error
+
+
+def test_sender_hostname_resolves_in_background(udp_listener):
+    import time
+    port, recv_all = udp_listener
+    s = OscSender('localhost', port)               # localhost 는 바로 127.0.0.1
+    assert s.ok
+    s.configure('127.0.0.1', port)
+    s.send('/a', 1)
+    assert recv_all() == [('/a', [1])]

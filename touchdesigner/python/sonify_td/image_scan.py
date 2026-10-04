@@ -86,7 +86,6 @@ class ImageAnalyzer:
     def __init__(self):
         self.img = None
         self.lum = None
-        self.labels = None
         self.palette = np.zeros((0, 3), dtype=np.float32)
         self.weights = np.zeros(0, dtype=np.float32)
         self.version = 0     # 이미지가 바뀔 때마다 +1 (렌더러 캐시 무효화용)
@@ -99,18 +98,21 @@ class ImageAnalyzer:
     def size(self):
         return (0, 0) if self.img is None else (self.img.shape[1], self.img.shape[0])
 
-    def set_image(self, arr, palette_size=5, palette=True):
-        """palette=False 면 팔레트(k-means)는 그대로 두고 픽셀 라벨만 다시 계산한다(영상 입력용, 더 싸다)."""
+    def set_image(self, arr, palette_size=5, palette=True, stats=True):
+        """영상 입력처럼 매 프레임 바뀔 때는 palette=False(k-means 생략), stats=False(정규화 범위 유지)로
+        부르면 몇 ms 안에 끝난다. 사진 한 장이면 둘 다 True."""
         img = to_rgb(arr)
         if img.shape[0] < 2 or img.shape[1] < 2:
             raise ValueError('이미지가 너무 작습니다: %s' % (img.shape,))
+        resized = self.img is None or self.img.shape != img.shape
         self.img = img
         self.lum = img @ LUMA
         self.version += 1
+        if stats or resized:
+            self._ranges = None
+            self._band_ref = {}
         if palette or len(self.palette) == 0:
             self.compute_palette(palette_size)
-        else:
-            self._label()
 
     def compute_palette(self, k):
         if self.img is None:
@@ -119,14 +121,56 @@ class ImageAnalyzer:
         step = max(1, int(np.sqrt(h * w / 4096.0)))
         sample = self.img[::step, ::step].reshape(-1, 3)
         self.palette, self.weights = kmeans_palette(sample, k)
-        self._label()
 
-    def _label(self):
-        """모든 픽셀이 어느 팔레트 색에 가장 가까운지 (스캔 중 색 구성비 계산용)."""
-        h, w = self.img.shape[:2]
-        flat = self.img.reshape(-1, 3)
-        dist = ((flat[:, None, :] - self.palette[None, :, :]) ** 2).sum(axis=2)
-        self.labels = dist.argmin(axis=1).reshape(h, w).astype(np.int16)
+    # ------------------------------------------------------------ 이미지별 정규화
+    # 우주 사진은 대부분 어두워서 lum 이 0.05~0.25, centroid 가 0.4~0.6 처럼 좁게 움직인다.
+    # 그대로 소리에 걸면 변화가 잘 안 들리므로, 이 사진의 모든 세로줄 값 분포(2~98%)를 0..1 로 편다.
+
+    def _column_profiles(self):
+        lum = self.lum
+        h, w = lum.shape
+        y = ((np.arange(h, dtype=np.float32) + 0.5) / h)[:, None]
+        tot = lum.sum(axis=0)
+        safe = np.where(tot > 1e-6, tot, 1.0)
+        cen = np.where(tot > 1e-6, (lum * y).sum(axis=0) / safe, 0.5)
+        idx = np.arange(w)
+        edge = np.clip(np.abs(lum[:, np.minimum(idx + 2, w - 1)] - lum[:, np.maximum(idx - 2, 0)]).mean(axis=0) * 4.0,
+                       0.0, 1.0)
+        _, sat, _ = rgb_to_hsv(self.img)
+        return {
+            'lum': lum.mean(axis=0),
+            'centroid': cen,
+            'edge': edge,
+            'sat': sat.mean(axis=0),
+            'contrast': np.minimum(1.0, lum.std(axis=0) * 3.0),
+        }
+
+    def ranges(self):
+        if self._ranges is None:
+            prof = self._column_profiles()
+            self._ranges = {k: (float(np.percentile(v, 2)), float(np.percentile(v, 98))) for k, v in prof.items()}
+        return self._ranges
+
+    def band_ref(self, bands):
+        """이 사진에서 대역 밝기의 98% 값 (bandsn 정규화 기준)."""
+        ref = self._band_ref.get(bands)
+        if ref is None:
+            h = self.lum.shape[0]
+            cs = np.concatenate([np.zeros((1, self.lum.shape[1])), np.cumsum(self.lum, axis=0, dtype=np.float64)])
+            idx = np.arange(bands)
+            lo = np.minimum((idx * h) // bands, h - 1)
+            hi = np.maximum(((idx + 1) * h) // bands, lo + 1)
+            allb = (cs[hi] - cs[lo]) / (hi - lo)[:, None]
+            ref = max(1e-3, float(np.percentile(allb, 98)))
+            self._band_ref[bands] = ref
+        return ref
+
+    @staticmethod
+    def _norm(v, rng):
+        lo, hi = rng
+        if hi - lo < 1e-6:
+            return 0.5
+        return float(min(1.0, max(0.0, (v - lo) / (hi - lo))))
 
     def _cols(self, x, width_px):
         w = self.img.shape[1]
@@ -159,6 +203,7 @@ class ImageAnalyzer:
                 'centroid': 0.5, 'spread': 0.0, 'peak': 0.0, 'contrast': 0.0, 'edge': 0.0,
                 'density': 0.0, 'palidx': 0, 'bands': z, 'band_rgb': np.zeros((bands, 3), np.float32),
                 'mix': np.zeros(k, np.float32),
+                'lumn': 0.0, 'centroidn': 0.5, 'edgen': 0.0, 'satn': 0.0, 'contrastn': 0.0, 'bandsn': z,
             }
         c0, c1, c = self._cols(x, width_px)
         col = self.img[:, c0:c1].mean(axis=1)            # (H, 3)
@@ -192,14 +237,17 @@ class ImageAnalyzer:
         right = self.lum[:, min(w - 1, c + 2)]
         edge = float(np.clip(np.abs(right - left).mean() * 4.0, 0.0, 1.0))
 
-        if self.labels is not None and k:
-            mix = np.bincount(self.labels[:, c0:c1].ravel(), minlength=k)[:k].astype(np.float32)
+        if k:
+            # 스캔선 아래 픽셀만 팔레트 색에 배정 (H x 선폭 개라 매 프레임 계산해도 싸다)
+            px = self.img[:, c0:c1].reshape(-1, 3)
+            lab = ((px[:, None, :] - self.palette[None, :, :]) ** 2).sum(axis=2).argmin(axis=1)
+            mix = np.bincount(lab, minlength=k)[:k].astype(np.float32)
             mix /= max(1.0, float(mix.sum()))
             palidx = int(mix.argmax())
         else:
             mix, palidx = np.zeros(k, np.float32), 0
 
-        return {
+        out = {
             'pos': float(x),
             'r': float(mean_rgb[0]), 'g': float(mean_rgb[1]), 'b': float(mean_rgb[2]),
             'lum': float(lum.mean()),
@@ -216,3 +264,8 @@ class ImageAnalyzer:
             'band_rgb': band_rgb,
             'mix': mix,
         }
+        rng = self.ranges()
+        for key in ('lum', 'centroid', 'edge', 'sat', 'contrast'):
+            out[key + 'n'] = self._norm(out[key], rng[key])
+        out['bandsn'] = np.clip(band_lum / self.band_ref(bands), 0.0, 1.0).astype(np.float32)
+        return out

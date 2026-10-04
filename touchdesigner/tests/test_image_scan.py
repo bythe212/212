@@ -86,3 +86,28 @@ def test_real_test_image(td_dir):
     assert len(a.palette) == 6 and abs(float(a.weights.sum()) - 1) < 1e-5
     lums = [a.analyze(x / 50.0, bands=24)['lum'] for x in range(51)]
     assert max(lums) > min(lums) * 1.5    # 왼쪽→오른쪽으로 가며 소리가 실제로 변한다
+
+
+def test_per_image_normalization(td_dir):
+    from PIL import Image
+    img = np.asarray(Image.open(os.path.join(td_dir, 'assets', 'deep_field.jpg')).convert('RGB').resize((512, 256)))
+    a = ImageAnalyzer()
+    a.set_image(td_array(img))
+    res = [a.analyze(x / 100.0, bands=24) for x in range(101)]
+    raw = [r['lum'] for r in res]
+    norm = [r['lumn'] for r in res]
+    assert max(raw) - min(raw) < 0.3                  # 원래는 좁게 움직이지만
+    assert min(norm) == 0.0 and max(norm) == 1.0      # 정규화하면 0..1 전체를 쓴다
+    cn = [r['centroidn'] for r in res]
+    assert max(cn) - min(cn) > 0.8
+    assert all(0.0 <= v <= 1.0 for r in res for v in r['bandsn'])
+    assert max(float(r['bandsn'].max()) for r in res) == 1.0
+    # 대역 기준값은 대역 수별로 캐시
+    assert set(a._band_ref) == {24}
+
+
+def test_normalization_flat_image():
+    a = ImageAnalyzer()
+    a.set_image(np.full((16, 16, 3), 0.3, np.float32))
+    r = a.analyze(0.5, bands=4)
+    assert r['lumn'] == 0.5 and r['centroidn'] == 0.5

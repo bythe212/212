@@ -11,9 +11,9 @@ HEADER = ['active', 'source', 'address', 'args', 'inmin', 'inmax', 'outmin', 'ou
 
 # 기본 예시 행은 전부 비활성(active=0). AbletonOSC 를 켜고 원하는 행만 1 로 바꾼다.
 DEFAULT_ROWS = [
-    ['0', 'scan/lum', '/live/device/set/parameter/value', '0 0 1', '0', '1', '0', '1'],
-    ['0', 'scan/centroid', '/live/device/set/parameter/value', '0 0 2', '0', '1', '0', '1'],
-    ['0', 'scan/edge', '/live/track/set/send', '0 0', '0', '1', '0', '0.8'],
+    ['0', 'scan/lumn', '/live/device/set/parameter/value', '0 0 1', '0', '1', '0', '1'],
+    ['0', 'scan/centroidn', '/live/device/set/parameter/value', '0 0 2', '0', '1', '0', '1'],
+    ['0', 'scan/edgen', '/live/track/set/send', '0 0', '0', '1', '0', '0.8'],
     ['0', 'feed1/zs', '/live/track/set/volume', '1', '-1', '1', '0.45', '0.85'],
     ['0', 'feed2/moms', '/live/track/set/panning', '2', '-1', '1', '-1', '1'],
     ['0', 'feed3/act', '/live/track/set/volume', '3', '0', '1', '0', '0.85'],

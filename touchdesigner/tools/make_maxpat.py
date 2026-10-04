@@ -4,19 +4,19 @@
 
 Ableton 에서 'Max MIDI Effect' 를 트랙에 넣고 편집(Max 열기) → 이 파일을 Max 에서 열어 전체 복사 → 붙여넣기.
   - /sonify/scan/trig (band note vel) → MIDI 노트 → 같은 트랙의 악기가 소리를 낸다 (별 = 음)
-  - 연속값(lum, centroid, hue, edge, feed*/zs ...) → 숫자 상자로 표시 (원하는 곳에 연결)
-  - /sonify/scan/bands → 막대 미터
+  - 연속값(lumn, centroidn, hue, edgen, note, feed*/zs ...) → 숫자 상자로 표시 (원하는 곳에 연결)
+  - /sonify/scan/bandsn → 막대 미터
 """
 import json
 import os
 import sys
 
 SCALARS = [
-    ('/sonify/scan/lum', '밝기 (음량)'),
-    ('/sonify/scan/centroid', '밝기 무게중심 (음높이)'),
-    ('/sonify/scan/hue', '색상 (음색)'),
-    ('/sonify/scan/edge', '경계/질감'),
-    ('/sonify/scan/density', '별 밀도'),
+    ('/sonify/scan/lumn', '밝기 0..1 (음량)'),
+    ('/sonify/scan/centroidn', '밝기 무게중심 0..1 (음높이)'),
+    ('/sonify/scan/hue', '색상 0..1 (음색)'),
+    ('/sonify/scan/edgen', '경계/질감 0..1'),
+    ('/sonify/scan/note', '주 음 (MIDI)'),
     ('/sonify/feed1/zs', '피드1 위치 -1..1'),
     ('/sonify/feed2/zs', '피드2 위치 -1..1'),
     ('/sonify/feed3/zs', '피드3 위치 -1..1'),
@@ -76,7 +76,7 @@ def build():
     p.wire(pmsg, 0, udp, 0)
     p.wire(lb, 0, port, 0)
 
-    addrs = ['/sonify/scan/trig', '/sonify/scan/bands'] + [a for a, _ in SCALARS]
+    addrs = ['/sonify/scan/trig', '/sonify/scan/bandsn'] + [a for a, _ in SCALARS]
     route = p.obj('route ' + ' '.join(addrs), 20, 140, w=900, outlets=len(addrs) + 1)
     p.wire(udp, 0, route, 0)
 
@@ -101,7 +101,7 @@ def build():
     p.comment('midiin -> midiout: 원래 MIDI 도 통과', 170, 355, 260)
 
     # 대역 미터
-    p.comment('/scan/bands (아래 -> 위 대역 밝기)', 360, 180, 300)
+    p.comment('/scan/bandsn (아래 -> 위 대역 밝기, 0..1)', 360, 180, 300)
     ms = p.box('multislider', 360, 205, 260, 120, None, 1, 2, ['', ''],
                parameter_enable=0, size=24, setminmax=[0.0, 1.0], orientation=0)
     p.wire(route, 1, ms, 0)

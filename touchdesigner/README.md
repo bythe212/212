@@ -170,6 +170,12 @@ API 키는 필요 없다. 모두 공개 API다.
 | `mix` (k개) | 줄 안에서 팔레트 각 색의 비율 | **색 = 트랙**, 비율 = 그 트랙 음량 |
 | `palette` | 사진 전체의 대표 색 k개와 비율 | |
 
+**정규화 값(…`n`)을 쓰면 소리 변화가 잘 들린다.**
+- 우주 사진은 대부분 어둡다. 그래서 `lum`은 0.05~0.25, `centroid`는 0.4~0.6처럼 좁게만 움직인다.
+- 그래서 사진을 넣을 때 모든 세로줄 값의 분포(2~98%)를 재 두고, 그 사진의 범위를 0..1로 편 값을 함께 보낸다.
+- 해당 값: `lumn`, `centroidn`, `edgen`, `satn`, `contrastn`, `bandsn`(대역별)
+- 주 음 `note`도 `centroidn`으로 계산한다. 그래서 설정한 음역 전체를 오간다.
+
 - 트리거는 평균이 아니라 **지나간 구간의 최댓값**으로 판단한다. 그래서 작은 별도 놓치지 않는다. 빠르게 훑어서 프레임 사이 열을 건너뛰어도 마찬가지다.
 - 같은 별에서 반복 발사되지 않도록 히스테리시스를 둔다. 임계값의 80% 아래로 내려가야 다시 장전된다.
 - 진짜 우주 사진은 NASA/ESA의 허블·제임스웹 공개 이미지를 쓴다. 이용 조건은 각 사이트를 확인한다. Image File에 넣으면 된다.
@@ -181,9 +187,10 @@ API 키는 필요 없다. 모두 공개 API다.
 | 주소 | 인자 | 언제 |
 |---|---|---|
 | `/sonify/scan/pos` `lum` `r` `g` `b` `hue` `sat` `centroid` `spread` `peak` `contrast` `edge` `density` `playing` `trigvel` | float | 매 틱(Rate Hz) |
+| `/sonify/scan/lumn` `centroidn` `edgen` `satn` `contrastn` | float 0..1 (사진별 정규화) | 매 틱 |
 | `/sonify/scan/note` `palidx` `trigband` `trignote` | int | 매 틱 |
 | `/sonify/scan/rgb` | f f f | 매 틱 |
-| `/sonify/scan/bands` | f × N (아래→위) | 매 틱 |
+| `/sonify/scan/bands`, `/sonify/scan/bandsn` | f × N (아래→위, 원값 / 사진별 정규화) | 매 틱 |
 | `/sonify/scan/mix` | f × k | 매 틱 |
 | `/sonify/scan/trig` | **i band, i note, f vel** | 별을 지나는 순간(이벤트) |
 | `/sonify/feed1/zs` `norms` `moms` `act` (feed2, feed3 같음) | float | 매 틱 |
@@ -207,7 +214,7 @@ API 키는 필요 없다. 모두 공개 API다.
 2. Max MIDI Effect의 편집 버튼으로 Max를 연다.
 3. `touchdesigner/ableton/sonify_receive.maxpat`을 Max에서 연다. 전체 선택(⌘/Ctrl+A) → 복사 → 장치 편집 창에 붙여넣고 저장한다.
 4. TD가 재생 중이면 **별을 지날 때마다 노트가 울린다**. 대역이 높을수록 높은 음이다.
-5. 연속값(lum, centroid, hue, edge, feed*/zs, iss/latn)은 숫자 상자로 들어온다. 원하는 곳에 연결하면 된다.
+5. 연속값(lumn, centroidn, hue, edgen, note, feed*/zs, iss/latn)은 숫자 상자로 들어온다. 원하는 곳에 연결하면 된다.
    - 포트는 패치 왼쪽 위 숫자 상자로 바꾼다(기본 9000 = TD의 Oscport).
    - 패치는 `tools/make_maxpat.py`로 다시 만들 수 있다.
 
@@ -222,11 +229,11 @@ API 키는 필요 없다. 모두 공개 API다.
 
 | active | source | address | args | inmin | inmax | outmin | outmax |
 |---|---|---|---|---|---|---|---|
-| 1 | scan/lum | /live/device/set/parameter/value | 0 0 1 | 0 | 1 | 0 | 1 |
+| 1 | scan/lumn | /live/device/set/parameter/value | 0 0 1 | 0 | 1 | 0 | 1 |
 | 1 | feed1/zs | /live/track/set/volume | 1 | -1 | 1 | 0.45 | 0.85 |
 | 1 | feed2/moms | /live/track/set/panning | 2 | -1 | 1 | -1 | 1 |
 
-- `source`는 5장의 값 이름에서 prefix를 뺀 것이다(`scan/centroid`, `feed3/act`, `iss/latn` …).
+- `source`는 5장의 값 이름에서 prefix를 뺀 것이다(`scan/centroidn`, `feed3/act`, `iss/latn` …).
 - `args`는 값 앞에 붙는 고정 인자다. 위 첫 행은 **트랙 0, 디바이스 0, 파라미터 1**이다. 인덱스는 0부터 센다. 디바이스의 파라미터 0은 보통 Device On이다.
 - 값은 `inmin..inmax`를 `outmin..outmax`로 직선 변환한 뒤 잘라낸다. 같은 값이면 다시 보내지 않는다(1초마다 한 번은 보낸다).
 - 파라미터 번호는 AbletonOSC에 `/live/device/get/parameters/name 0 0`를 보내 확인한다. 응답은 11001 포트로 온다.

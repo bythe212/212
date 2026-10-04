@@ -6,6 +6,7 @@ TD 밖(테스트, 모니터 도구)에서도 똑같이 동작한다.
 import math
 import socket
 import struct
+import threading
 
 INT32_MIN = -(2 ** 31)
 INT32_MAX = 2 ** 31 - 1
@@ -148,15 +149,35 @@ class OscSender:
         self.host, self.port = host, port
         self.addr = None
         try:
-            info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_DGRAM)
-            self.addr = info[0][4]
             if self.sock is None:
                 self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
                 self.sock.setblocking(False)
+        except OSError as e:
+            self.last_error = 'socket: %s' % e
+            return
+        if host == 'localhost':
+            host = '127.0.0.1'
+        try:
+            socket.inet_aton(host)               # IP 주소면 바로
+            self.addr = (host, port)
             self.last_error = None
-        except (OSError, ValueError) as e:
-            self.last_error = 'host %s: %s' % (host, e)
+            return
+        except OSError:
+            pass
+        # 호스트 이름은 DNS 조회가 TD 메인 스레드를 몇 초씩 멈출 수 있어서 백그라운드에서 푼다
+        self.last_error = 'resolving %s' % host
+        threading.Thread(target=self._resolve, args=(host, port), daemon=True).start()
+
+    def _resolve(self, host, port):
+        try:
+            info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_DGRAM)
+            addr = info[0][4]
+            err = None
+        except (OSError, ValueError, UnicodeError) as e:
+            addr, err = None, 'host %s: %s' % (host, e)
+        if (host, port) == (self.host, self.port):      # 그사이 설정이 또 바뀌었으면 버린다
+            self.addr, self.last_error = addr, err
 
     @property
     def ok(self):
