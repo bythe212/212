@@ -383,7 +383,7 @@ def build_sonify():
     st(view, x=0, y=0, w=R.WIDTH, h=R.HEIGHT, top='../' + out.name)
     params = mk('parameterCOMP', 300, 100, '컨트롤 패널 = 이 컨테이너의 커스텀 파라미터')
     st(params, x=R.WIDTH, y=0, w=320, h=R.HEIGHT, op='..')
-    st(params, critical=False, builtin=False, custom=True)
+    st(params, critical=False, builtin=False, custom=True, pagenames=True)
     window = mk('windowCOMP', 300, -100, 'UI 창 (View 페이지의 Open Window)')
     st(window, winop='..')
     st(window, critical=False, winw=1600, winh=720, title='Sonify')

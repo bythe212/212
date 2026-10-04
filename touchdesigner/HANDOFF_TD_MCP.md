@@ -33,18 +33,22 @@ SONIFY_DIR = r'<DIR>'; exec(open(SONIFY_DIR + '/td/verify_sonify.py', encoding='
 - `status`에서 feed1~3과 iss가 `ok`다. `ERR`이면 오류 문자열을 본다.
 - `engine.palette`에 색이 5개 있다.
 
-## 3. 이미 의심되는 지점 (실제 TD에서 확인 못 한 API)
-| 위치 | 가정 | 틀리면 |
-|---|---|---|
-| GLSL 유니폼 | `glsl.seq.vec.numBlocks`, `vec{i}name`, `vec{i}value{x..w}` | `rep`에 SET glsl1.vec… → 실제 이름을 필터로 찾아 고친다 (`[p.name for p in g.pars() if 'vec' in p.name][:12]`) |
-| 확장 | `extension1`, `promoteextension1`, `reinitextensions` (없으면 `seq.ext`/`ext0object`) | `rep`에 EXT |
-| 오버레이 방향 | numpy 0행 = 이미지 아래(TD 규약) → 그린 배열을 뒤집어 `copyNumpyArray` | 글자가 뒤집히면 `Overlayflip` 끄고 기본값을 바꾼다 |
-| 분석 방향 | `numpyArray()` 0행 = 아래 → 대역 0 = 아래 = 낮은 음 | 사진 아래쪽 별이 높은 음을 내면 `image_scan.py`에서 뒤집는다 |
-| Resolution TOP | 타입 `resolutionTOP` (없으면 `fitTOP`) | |
-| 패널 | 컨테이너 `top`(배경 TOP), `panel.u/v/lselect` | 클릭 시크가 안 되면 확인 |
-| Parameter COMP | `op`, `builtin`, `custom` | soft |
-| Window COMP | `winop`, `winw`, `winh`, `winopen` | soft/rep |
-| Parameter Execute | `op`, `pars`, `custom`, `builtin`, `valuechange`, `onpulse` | 컨트롤이 안 먹으면 확인 |
+## 3. 실제 TD에서 확인 못 한 API
+문서 사이트(docs.derivative.ca)는 클라우드 세션에서 막혀 있었다. 그래서 웹 검색 요약으로 확인할 수 있는 만큼만 확인했다.
+
+| 위치 | 가정 | 검색으로 확인 | 틀리면 |
+|---|---|---|---|
+| 이미지 방향 | `numpyArray()`는 왼쪽 아래 원점(0행 = 아래). 분석 대역 0 = 아래, 오버레이는 뒤집어서 `copyNumpyArray` | ✅ (Derivative OpenCV 문서: TD는 bottom/left 기준) | 글자가 뒤집히면 `Overlayflip` 끄기 |
+| Script TOP | `copyNumpyArray(arr)`, uint8/uint16/float32, (h, w, c) | ✅ | |
+| GLSL 유니폼 | `vec{i}name`, `vec{i}value{x..w}` + `glsl.seq.vec.numBlocks` | 이름 ✅ / `seq.vec` 미확인 | `rep`의 SET glsl1.vec… → `[p.name for p in g.pars() if 'vec' in p.name][:12]` |
+| Parameter Execute | OP=`..`, Parameters=`*`, Built-In 끄기, 콜백 `onValueChange`/`onPulse` | 동작 ✅ / 파이썬 이름(`op` `pars` `custom` `builtin` `valuechange` `onpulse`) 미확인 | 컨트롤이 안 먹으면 확인 |
+| Execute DAT | `framestart` | ✅ | |
+| Window COMP | `winop`, `winw`, `winh`, `winopen.pulse()` | ✅ | |
+| Container 배경 | `top` (Background TOP), 채우기 `topfill` | ✅ | |
+| Parameter COMP | `op`, `builtin`, `custom`, `pagenames` | `builtin` `custom` `pagenames` ✅ / `op` 미확인 | 패널이 비면 `op` 이름 확인 |
+| 확장 | `extension1`, `promoteextension1`, `extname1`, `reinitextensions` (없으면 `seq.ext`/`ext0object`) | Re-Init Extensions 존재 ✅ / 이름 미확인 | `rep`에 EXT |
+| Resolution TOP | 타입 `resolutionTOP` (없으면 `fitTOP`) | 미확인 | |
+| 패널 값 | `panel.u`, `panel.v`, `panel.lselect` | 미확인 | 클릭 시크가 안 되면 확인 |
 
 고친 내용은 `build_sonify.py`에 반영한다. TD에서 손으로만 고치지 않는다. 같은 가정을 쓰는 `tests/mock_td.py`도 맞춰 고치고 `python3 -m pytest -q touchdesigner/tests`를 통과시킨다.
 
